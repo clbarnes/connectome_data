@@ -1,0 +1,10 @@
+scipy
+matplotlib
+pandas
+numpy
+networkx
+tabulate
+ipython
+seaborn
+scikit-learn
+networkit

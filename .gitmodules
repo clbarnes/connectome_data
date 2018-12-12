@@ -1,0 +1,3 @@
+[submodule "source_data/bentley_2016_S1_dataset"]
+	path = source_data/bentley_2016_S1_dataset
+	url = git@github.com:clbarnes/bentley_2016_S1_dataset.git
