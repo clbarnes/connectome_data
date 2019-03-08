@@ -2,9 +2,15 @@ scipy
 matplotlib
 pandas
 numpy
-networkx
+networkx>=2.0
 tabulate
 ipython
 seaborn
 scikit-learn
-networkit
+cython
+bctpy
+pytest
+tqdm
+
+# required, but needs everything else to be installed first
+# networkit

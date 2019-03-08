@@ -1,19 +1,26 @@
 
 
-def unpad_number(s: str) -> str:
+def unpad_name(s: str) -> str:
+    s = s.strip()
     out = ''
     this_element = ''
-    was_digit = s[0].isdigit()
-    for c in s:
-        is_digit = c.isdigit()
-        if is_digit != was_digit:
-            if was_digit:
-                this_element = str(int(ele_str))
+    is_digit = s[0].isdigit()
+
+    for next_char in s:
+        next_is_digit = next_char.isdigit()
+        if next_is_digit != is_digit:
+            this_element = unpad_element(this_element)
             out += this_element
             this_element = ''
-            was_digit = is_digit
-        this_element += c
-    if was_digit:
-        this_element = str(int(ele_str))
+            is_digit = next_is_digit
+        this_element += next_char
+
+    this_element = unpad_element(this_element)
     out += this_element
     return out
+
+
+def unpad_element(s: str) -> str:
+    if s.isdigit():
+        s = str(int(s))
+    return s

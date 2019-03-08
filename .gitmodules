@@ -1,3 +1,6 @@
 [submodule "source_data/bentley_2016_S1_dataset"]
 	path = source_data/bentley_2016_S1_dataset
 	url = git@github.com:clbarnes/bentley_2016_S1_dataset.git
+[submodule "source_data/connectome_construct"]
+	path = source_data/connectome_construct
+	url = git@github.com:clbarnes/connectome_construct.git
