@@ -1,9 +1,11 @@
 import csv
+from typing import Tuple
 
 import pandas as pd
 import logging
 
-from connectome_data.constants import AC_ROOT, EMMONS_ROOT, EdgeType
+from connectome_data.constants import AC_ROOT, EMMONS_ROOT, EdgeType, NEURONS, Simplicity, Directedness, Weightedness, \
+    BENTLEY_ROOT
 from connectome_data.utils import unpad_name
 
 logger = logging.getLogger(__name__)
@@ -41,7 +43,7 @@ def emmons_herm_edgelist() -> pd.DataFrame:
 
     df["Type"] = [EdgeType(s.strip()) for s in df["Type"]]
 
-    neurons = set(neuron_list())
+    neurons = set(NEURONS)
     rows_to_drop = []
     for row in df.itertuples():
         if not neurons.issuperset((row.Source, row.Target)):
@@ -51,9 +53,42 @@ def emmons_herm_edgelist() -> pd.DataFrame:
     return df
 
 
-def neuron_list():
-    with open(AC_ROOT / "nodelist.txt") as f:
-        return [line.strip() for line in f]
+def extrasyn_edges(etype) -> Tuple[Tuple[str, str], ...]:
+    etype_abbrev = {
+        EdgeType.MONOAMINE: 'MA',
+        EdgeType.NEUROPEPTIDE: 'NP',
+    }
+    src_fpath = BENTLEY_ROOT / "edge_lists" / f"edgelist_{etype_abbrev[etype]}.csv"
+    edgeset = set()
+    with open(src_fpath) as f:
+        for row in csv.reader(f):
+            edgeset.add(tuple(row[:2]))
+    return tuple(sorted(edgeset))
+
+
+def df_to_edges(
+    df: pd.DataFrame, etype: EdgeType=None,
+    simplicity=Simplicity.SIMPLE, directedness=Directedness.DIRECTED, weightedness=Weightedness.UNWEIGHTED
+) -> Tuple[Tuple[str, str], ...]:
+    if not simplicity.is_simple:
+        raise NotImplementedError("Multigraphs not implemented")
+    if weightedness.is_weighted:
+        raise NotImplementedError("Weighted graphs are not implemented")
+
+    edgeset = set()
+
+    for row in df.itertuples():
+        if etype and etype != row.Type:
+            continue
+        to_add = (row.Source, row.Target)
+        if not directedness.is_directed:
+            edgeset.add(tuple(sorted(to_add)))
+        else:
+            edgeset.add(to_add)
+            if row.Type == EdgeType.ELECTRICAL:
+                edgeset.add(to_add[::-1])
+
+    return tuple(sorted(edgeset))
 
 
 if __name__ == '__main__':

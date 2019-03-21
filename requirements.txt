@@ -8,7 +8,7 @@ ipython
 seaborn
 scikit-learn
 cython
-bctpy
+git+https://github.com/clbarnes/bctpy.git@71-mod-dir
 pytest
 tqdm
 
