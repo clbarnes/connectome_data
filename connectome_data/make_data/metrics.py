@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable
 
+import h5py
 import numpy as np
 from bct import (
     density_dir,
@@ -185,7 +186,7 @@ def dict_to_list(d: Dict, order=None):
 
 
 @dataclass
-class EnsembleMetrics:
+class EnsembleMetrics(Metrics):
     nodes: np.ndarray
     mean_path_length: np.ndarray
     global_efficiency: np.ndarray
@@ -209,9 +210,9 @@ class EnsembleMetrics:
 
         for this_metrics in metrics:
             if nodes is None:
-                nodes = sorted(modules)
+                nodes = sorted(this_metrics.modules)
             else:
-                assert nodes == sorted(modules)
+                assert nodes == sorted(this_metrics.modules)
             mean_path_length.append(this_metrics.mean_path_length)
             global_efficiency.append(this_metrics.global_efficiency)
             transitivity.append(this_metrics.transitivity)
@@ -234,8 +235,25 @@ class EnsembleMetrics:
 
     @classmethod
     def from_dir(cls, dpath: Path):
+        h5_path = dpath / "combined.hdf5"
+        if h5_path.is_file():
+            return cls.from_hdf5(h5_path)
+
         metrics = (SimpleDirectedUnweightedMetrics.from_json(fpath) for fpath in dpath.glob('*.json'))
         return cls.from_metrics(metrics)
+
+    def to_hdf5(self, fpath):
+        with h5py.File(fpath, 'x') as f:
+            for k, v in self.__dict__.items():
+                if k == "nodes":
+                    f.attrs['nodes'] = ' '.join(v)
+                else:
+                    f.create_dataset(k, data=v)
+
+    @classmethod
+    def from_hdf5(cls, fpath):
+        with h5py.File(fpath, 'r') as f:
+            cls(nodes=f.attrs['nodes'], **dict(f.items()))
 
 
 def calc_metrics(fpath):
@@ -261,55 +279,51 @@ def check_for_self_loops():
         print("no self-loops found")
 
 
-def main():
+def make_metrics():
     directedness = Directedness.DIRECTED
     weightedness = Weightedness.UNWEIGHTED
     metric_root = tgt_dir(Simplicity.SIMPLE, directedness, weightedness)
-    all_metrics = []
-    real_metrics = None
 
-    fpath = metric_root / 'ww' / 'real.csv'
-    fpath, metrics = calc_metrics(fpath)
-    metrics.to_json(fpath.with_suffix('.json'))
-    pass
+    with ProcessPoolExecutor(max_workers=THREADS) as exe:
+        futs = []
+        submitted = set()
+        for fpath in metric_root.rglob('*.csv'):
+            try:
+                with open(fpath.with_suffix('.json')) as f:
+                    json.load(f)
+                continue
+            except json.JSONDecodeError:
+                os.remove(fpath.with_suffix('.json'))
+            except FileNotFoundError:
+                pass
+            futs.append(exe.submit(calc_metrics, fpath))
+            submitted.add(fpath)
 
-    # with ProcessPoolExecutor(max_workers=THREADS) as exe:
-    #     futs = []
-    #     submitted = set()
-    #     for fpath in metric_root.rglob('*.csv'):
-    #         try:
-    #             with open(fpath.with_suffix('.json')) as f:
-    #                 json.load(f)
-    #             continue
-    #         except json.JSONDecodeError:
-    #             os.remove(fpath.with_suffix('.json'))
-    #         except FileNotFoundError:
-    #             pass
-    #         futs.append(exe.submit(calc_metrics, fpath))
-    #         submitted.add(fpath)
-    #
-    #     failed = 0
-    #
-    #     for fut in tqdm(as_completed(futs), total=len(submitted)):
-    #         try:
-    #             fpath, metrics = fut.result()
-    #         except Exception:
-    #             traceback.print_exc()
-    #             failed += 1
-    #             continue
-    #
-    #         metrics.to_json(fpath.with_suffix('.json'))
-    #         submitted.remove(fpath)
-    #
-    # assert len(submitted) == failed
-    # if submitted:
-    #     warnings.warn("The following failed:\n\t" + "\n\t".join(sorted(str(p) for p in submitted)))
+        failed = 0
 
-    # ensemble_metrics = EnsembleMetrics.from_metrics(all_metrics)
+        for fut in tqdm(as_completed(futs), total=len(submitted)):
+            try:
+                fpath, metrics = fut.result()
+            except Exception:
+                traceback.print_exc()
+                failed += 1
+                continue
 
-    # return real_metrics, ensemble_metrics
+            metrics.to_json(fpath.with_suffix('.json'))
+            submitted.remove(fpath)
+
+    assert len(submitted) == failed
+    if submitted:
+        warnings.warn("The following failed:\n\t" + "\n\t".join(sorted(str(p) for p in submitted)))
+
+
+def make_ensemble_metrics():
+    for dpath in tgt_dir().rglob('rand'):
+        ensemble = EnsembleMetrics.from_dir(dpath)
+        ensemble.to_hdf5(dpath.parent / 'combined.hdf5')
 
 
 if __name__ == '__main__':
     # check_for_self_loops()
-    main()
+    make_metrics()
+    make_ensemble_metrics()

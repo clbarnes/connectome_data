@@ -57,10 +57,10 @@ def controls():
         serialisers.append(edges_to_graph_ser(edges, str(etype)))
 
     for serialiser in tqdm(serialisers):
-        for _ in tqdm(serialiser.rand_graphs(0, 999), total=1000):
+        for _ in tqdm(serialiser.rand_graphs(999, 1000), total=1):
             pass
 
 
 if __name__ == '__main__':
-    no_controls()
+    # no_controls()
     controls()
