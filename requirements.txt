@@ -8,9 +8,17 @@ ipython
 seaborn
 scikit-learn
 cython
-git+https://github.com/clbarnes/bctpy.git@71-mod-dir
+git+https://github.com/aestrivex/bctpy.git
+git+https://github.com/clbarnes/pyveplot.git
+git+https://github.com/clbarnes/svgwrite.git
+#git+https://github.com/clbarnes/floweaver.git
 pytest
 tqdm
+colour
+palettable
+nltk
+
+#pySankeyBeta
 
 # required, but needs everything else to be installed first
 # networkit
