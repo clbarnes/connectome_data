@@ -2,7 +2,7 @@ from collections import Counter
 
 import pytest
 
-from connectome_data.source_data import emmons_herm_edgelist, ac_herm_edgelist, old_ww_herm_edgelist
+from connectome_data.make_data.source_data import emmons_herm_edgelist, ac_herm_edgelist, old_ww_herm_edgelist
 from connectome_data.constants import EdgeType
 
 
