@@ -9,6 +9,7 @@ from concurrent.futures.process import ProcessPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable
+import multiprocessing as mp
 
 import h5py
 import numpy as np
@@ -23,11 +24,8 @@ from bct import (
     binarize)
 from tqdm import tqdm
 
-from connectome_data.constants import tgt_dir, Simplicity, Directedness, Weightedness, NEURONS
-
-
-THREADS = 25
-
+from connectome_data.constants import tgt_dir, Simplicity, Directedness, Weightedness, NEURONS, RAND_DIR, \
+    ENSEMBLE_METRICS
 
 # density (dir)
 # mean_path_length (dir)
@@ -235,7 +233,7 @@ class EnsembleMetrics(Metrics):
 
     @classmethod
     def from_dir(cls, dpath: Path):
-        h5_path = dpath / "combined.hdf5"
+        h5_path = dpath / "ensemble.hdf5"
         if h5_path.is_file():
             return cls.from_hdf5(h5_path)
 
@@ -253,7 +251,7 @@ class EnsembleMetrics(Metrics):
     @classmethod
     def from_hdf5(cls, fpath):
         with h5py.File(fpath, 'r') as f:
-            cls(nodes=f.attrs['nodes'], **dict(f.items()))
+            return cls(nodes=f.attrs['nodes'], **{k: v[:] for k, v in f.items()})
 
 
 def calc_metrics(fpath):
@@ -279,12 +277,16 @@ def check_for_self_loops():
         print("no self-loops found")
 
 
-def make_metrics():
+def make_all_metrics():
     directedness = Directedness.DIRECTED
     weightedness = Weightedness.UNWEIGHTED
     metric_root = tgt_dir(Simplicity.SIMPLE, directedness, weightedness)
+    make_metrics(metric_root)
 
-    with ProcessPoolExecutor(max_workers=THREADS) as exe:
+
+def make_metrics(metric_root, workers=None):
+    workers = workers or mp.cpu_count()
+    with ProcessPoolExecutor(max_workers=workers) as exe:
         futs = []
         submitted = set()
         for fpath in metric_root.rglob('*.csv'):
@@ -317,13 +319,14 @@ def make_metrics():
         warnings.warn("The following failed:\n\t" + "\n\t".join(sorted(str(p) for p in submitted)))
 
 
-def make_ensemble_metrics():
-    for dpath in tgt_dir().rglob('rand'):
+def make_ensemble_metrics(metric_root=None):
+    metric_root = metric_root or tgt_dir()
+    for dpath in metric_root.rglob(RAND_DIR):
         ensemble = EnsembleMetrics.from_dir(dpath)
-        ensemble.to_hdf5(dpath.parent / 'combined.hdf5')
+        ensemble.to_hdf5(dpath.parent / ENSEMBLE_METRICS)
 
 
 if __name__ == '__main__':
     # check_for_self_loops()
-    make_metrics()
+    make_all_metrics()
     make_ensemble_metrics()

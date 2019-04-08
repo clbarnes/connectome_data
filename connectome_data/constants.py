@@ -1,7 +1,8 @@
 import os
 from enum import Enum
+from functools import total_ordering
 from pathlib import Path
-from typing import Type, Dict, Optional
+from typing import Type, Dict, Optional, Callable, Tuple
 
 import networkx as nx
 
@@ -12,6 +13,8 @@ SRC_ROOT = PROJECT_ROOT / "source_data"
 EMMONS_ROOT = SRC_ROOT / "emmons"
 BENTLEY_ROOT = SRC_ROOT / "bentley_2016_S1_dataset" / "S1 Dataset. Included are edge lists and source data for monoamine and neuropeptide networks"
 AC_ROOT = SRC_ROOT / "connectome_construct" / "physical" / "src_data"
+DISTANCE_JSON = SRC_ROOT / "connectome_construct" / "metadata" / "tgt_data" / "dist_info.json"
+NODES_DATA = SRC_ROOT / "connectome_construct" / "metadata" / "tgt_data" / "node_data.json"
 
 TGT_ROOT = PROJECT_ROOT / "target_data"
 # UNDIR_EDGELISTS_ROOT = TGT_ROOT / "undir_simple_edgelists"
@@ -19,21 +22,36 @@ TGT_ROOT = PROJECT_ROOT / "target_data"
 SWAPS_PER_EDGE = 10
 N_RANDOM = 100
 
+RAND_DIR = 'rand'
+REAL_EDGES = "real.csv"
+REAL_METRICS = "real.json"
+ENSEMBLE_METRICS = "ensemble.hdf5"
+
 with open(AC_ROOT / "nodelist.txt") as f:
     NEURONS = tuple(sorted(line.strip() for line in f))
 
 NEURON_COUNT = len(NEURONS)
 
 
+@total_ordering
 class StrEnum(Enum):
     def __str__(self):
         return str(self.value)
 
     def __eq__(self, other):
-        if isinstance(other, str):
-            return str(self) == other
-        else:
-            return super().__eq__(other)
+        try:
+            return super().__eq__(type(self)(other))
+        except Exception:
+            return NotImplemented
+
+    def __lt__(self, other):
+        try:
+            other = type(self)(other)
+        except:
+            return NotImplemented
+
+        order = list(type(self))
+        return order.index(self) < order.index(other)
 
     def __hash__(self):
         return hash(self.value)
@@ -44,6 +62,38 @@ class EdgeType(StrEnum):
     ELECTRICAL = "electrical"
     MONOAMINE = "monoamine"
     NEUROPEPTIDE = "neuropeptide"
+
+    @classmethod
+    def physical(cls):
+        return cls.CHEMICAL, cls.ELECTRICAL
+
+    @classmethod
+    def extrasynaptic(cls):
+        return cls.MONOAMINE, cls.NEUROPEPTIDE
+
+
+class Monoamine(StrEnum):
+    DOPAMINE = "dopamine"
+    OCTOPAMINE = "octopamine"
+    SEROTONIN = "serotonin"
+    TYRAMINE = "tyramine"
+
+    def ellision(self):
+        return str(self)[:3]
+
+    def abbreviation(self):
+        return {
+            type(self).SEROTONIN: "5-HT",
+            type(self).DOPAMINE: "DA",
+            type(self).OCTOPAMINE: "OA",
+            type(self).TYRAMINE: "TA"
+        }
+
+
+class NodeType(StrEnum):
+    INTERNEURON = "interneuron"
+    MOTOR = "motor"
+    SENSORY = "sensory"
 
 
 class Wiring(StrEnum):
@@ -67,6 +117,9 @@ class Directedness(StrEnum):
             return cls.UNDIRECTED
         raise ValueError("Not recognised graph type")
 
+    def __bool__(self):
+        return self.is_directed
+
 
 class Simplicity(StrEnum):
     MULTI = "multi"
@@ -83,6 +136,9 @@ class Simplicity(StrEnum):
         elif isinstance(g, nx.Graph):
             return cls.SIMPLE
         raise ValueError("Not recognised graph type")
+
+    def __bool__(self):
+        return self.is_simple
 
 
 class Weightedness(StrEnum):
@@ -103,6 +159,29 @@ class Weightedness(StrEnum):
             val_set.add(val)
 
         return cls.UNWEIGHTED if val_set == {1} else cls.WEIGHTED
+
+    def __bool__(self):
+        return self.is_weighted
+
+
+# def make_to_from_fns(falsey: str, truthy: str) -> Tuple[Callable[[bool], str], Callable[[str], bool]]:
+#     false_true = [falsey, truthy]
+#
+#     def to_str(arg: bool) -> str:
+#         return false_true[bool(arg)]
+#
+#     def from_str(arg: str) -> bool:
+#         idx = false_true.index(arg)
+#         if idx in (0, 1):
+#             return bool(idx)
+#         raise ValueError(f"Argument {arg} not valid")
+#
+#     return to_str, from_str
+#
+#
+# simple_to_str, simple_from_str = make_to_from_fns('multi', 'simple')
+# directed_to_str, directed_from_str = make_to_from_fns('und', 'dir')
+# weighted_to_str, weighted_from_str = make_to_from_fns('unweighted', 'weighted')
 
 
 def graph_type(simp: Simplicity = Simplicity.SIMPLE, dire: Directedness = Directedness.UNDIRECTED):
@@ -128,11 +207,11 @@ def tgt_dir(
 ):
     """directedness requires simplicity, weightedness requires directedness"""
     p = root
-    if simplicity:
+    if simplicity is not None:
         p /= str(simplicity)
-        if directedness:
+        if directedness is not None:
             p /= str(directedness)
-            if weightedness:
+            if weightedness is not None:
                 p /= str(weightedness)
     if tail:
         p /= tail

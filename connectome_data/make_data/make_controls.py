@@ -3,8 +3,8 @@ from typing import List
 import networkx as nx
 from tqdm import tqdm
 
-from connectome_data.constants import EdgeType, Directedness, tgt_dir, Simplicity, Weightedness
-from connectome_data.source_data import ac_herm_edgelist, emmons_herm_edgelist, df_to_edges, extrasyn_edges
+from connectome_data.constants import EdgeType, Directedness, Simplicity, Weightedness
+from connectome_data.make_data.source_data import ac_herm_edgelist, emmons_herm_edgelist, df_to_edges, extrasyn_edges
 from connectome_data.utils import GraphSerialiser
 
 # NO CONTROLS
@@ -57,7 +57,7 @@ def controls():
         serialisers.append(edges_to_graph_ser(edges, str(etype)))
 
     for serialiser in tqdm(serialisers):
-        for _ in tqdm(serialiser.rand_graphs(999, 1000), total=1):
+        for _ in tqdm(serialiser.rand_graphs(0, 1000), total=1):
             pass
 
 

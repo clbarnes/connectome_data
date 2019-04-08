@@ -4,17 +4,19 @@ import random
 import re
 from abc import ABC
 from concurrent.futures.process import ProcessPoolExecutor
+from itertools import chain
 from pathlib import Path
 from typing import Type, Tuple, Iterator, Iterable, Union
 
 import networkx as nx
 import numpy as np
 from bct.algorithms.reference import randmio_dir, randmio_und
+from tqdm import tqdm
 
 from connectome_data.constants import (
     Directedness, Simplicity, Weightedness, TGT_ROOT, tgt_dir, graph_type,
-    StrEnum, SWAPS_PER_EDGE
-)
+    StrEnum, SWAPS_PER_EDGE,
+    REAL_EDGES, RAND_DIR)
 
 
 def unpad_name(s: str) -> str:
@@ -101,6 +103,15 @@ class EdgesNormaliser:
 
         return tuple(sorted((src, tgt, weight) for (src, tgt), weight in row_dict.items()))
 
+    def union(self, *edges):
+        if self.simple and self.directed and not self.weighted:
+            out = set()
+            for src, tgt, *_ in chain.from_iterable(edges):
+                out.add((src, tgt, 1))
+            return tuple(sorted(out))
+
+        raise NotImplementedError("only simple, directed, unweighted")
+
 
 def to_np_seed(hashable):
     return random.Random(hashable).randint(0, 2**32-1)
@@ -124,9 +135,9 @@ class GraphSerialiser:
         self._nodelist = None
 
         self.dir = tgt_dir(self.simplicity, self.directedness, self.weightedness, self.name, self.tgt_root)
-        self.rand_dir = self.dir / "rand"
-        self.info_json = self.dir / "info.json"
-        self.real_csv = self.dir / "real.csv"
+        self.rand_dir = self.dir / RAND_DIR
+        # self.info_json = self.dir / "info.json"
+        self.real_csv = self.dir / REAL_EDGES
 
     @property
     def nodelist(self):
@@ -162,10 +173,11 @@ class GraphSerialiser:
 
     def rand_paths(self, start=0, stop=None) -> Iterator[Tuple[int, Path]]:
         if stop is None:
-            stop = self.max_rand_graphs
+            stop = self.max_rand_graphs + 1
         idx = start
+        ndigits = len(str(self.max_rand_graphs))
         while idx < stop:
-            yield idx, self.rand_dir / str(idx).zfill(len(str(self.max_rand_graphs))) + '.csv'
+            yield idx, self.rand_dir / f"{str(idx).zfill(ndigits)}.csv"
             idx += 1
 
     def generate_random(self, idx_paths: Iterable[Tuple[int, Path]]):
@@ -244,3 +256,9 @@ class GraphSerialiser:
         instance.graph = graph
 
         return instance
+
+
+class TqdmStream:
+    @classmethod
+    def write(cls, msg):
+        tqdm.write(msg, end='')
