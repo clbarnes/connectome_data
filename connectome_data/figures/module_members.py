@@ -12,10 +12,8 @@ from matplotlib import pyplot as plt
 import nltk
 import palettable
 import pandas as pd
-from colour import Color
 
 from connectome_data.constants import NODES_DATA
-from connectome_data.figures.common import module_name
 from connectome_data.figures.constants import TGT_DIR, DEFAULT_WIRING, OUT_DIR
 from connectome_data.figures.sankey.classes import Sankey
 
@@ -94,18 +92,18 @@ class Membership:
     def from_membership(cls, membership: Membership):
         return cls(membership.cell_to_idx.copy())
 
-    def agglomerate(self, threshold) -> Tuple[Membership, Dict[Any, Any]]:
-        mapping = self.agglomeration_mapping(threshold)
+    def agglomerate(self, threshold, new_name='other') -> Tuple[Membership, Dict[Any, Any]]:
+        mapping = self.agglomeration_mapping(threshold, new_name)
         return self.remap_modules(mapping), mapping
 
-    def agglomeration_mapping(self, threshold) -> Dict[int, int]:
+    def agglomeration_mapping(self, threshold, new_name='other') -> Dict[int, int]:
         """Return a dict, from indices of modules smaller than ``threshold`` to a new module index"""
         to_agglomerate = []
 
         for label, cells in self.as_sets():
             if len(cells) < threshold:
                 to_agglomerate.append(label)
-        return {old: "other" for old in to_agglomerate}
+        return {old: new_name for old in to_agglomerate}
 
     def plot_comparison(self, other):
         lefts = []
@@ -242,10 +240,11 @@ class ModuleUnderstander(Membership):
 
 
 def get_memberships(agglomerate=10):
-    phys, comb = (Membership.from_dir(d, module_name) for d in (PHYS_DIR, COMB_DIR))
+    phys = Membership.from_dir(PHYS_DIR, lambda x: f"phys. {x:02d}")
+    comb = Membership.from_dir(COMB_DIR, lambda x: f"comb. {x:02d}")
     if agglomerate:
-        phys = phys.agglomerate(agglomerate)[0]
-        comb = comb.agglomerate(agglomerate)[0]
+        phys = phys.agglomerate(agglomerate, 'phys. other')[0]
+        comb = comb.agglomerate(agglomerate, 'comb. other')[0]
     return phys, comb
 
 
@@ -262,26 +261,35 @@ def write_notes(names_memberships, fpath):
             first = False
 
 
-def draw_sankey(phys, comb, show=False, save=None):
-    with open("sankey/ordering.json") as f:
-        sorting = json.load(f)
-
-    cseq = palettable.colorbrewer.qualitative.Set1_6.mpl_colors
-    colors = {label: Color(rgb=c) for label, c in zip(sorting["left"], cseq)}
+def draw_sankey(phys: Membership, comb: Membership, show=False, save=None):
+    # cseq = palettable.colorbrewer.qualitative.Set1_6.mpl_colors
+    # colors = {label: Color(rgb=c) for label, c in zip(sorting["left"], cseq)}
+    phys_order = [m for m, _ in phys.as_sets(True)]
+    comb_order = list(set(comb.cell_to_idx.values()))
 
     sankey = Sankey(
-        sorting["left"], sorting["right"], dict(phys.compare(comb)),
-        xticklabels=("physical", "combined"), left_colors=colors
+        phys_order, comb_order,
+        dict(phys.compare(comb)),
+        xticklabels=("physical", "combined"), left_colors=palettable.colorbrewer.qualitative.Set1_6
     )
     if save:
-        sankey.save(OUT_DIR / "modules.svg")
+        sankey.save(save)
     if show:
         plt.show()
 
 
+def to_int_idx(*memberships: Membership) -> Iterator[Membership]:
+    lastmax = 0
+    for m in memberships:
+        mapping = {old[0]: new for new, old in enumerate(m.as_sets(True), lastmax+1)}
+        yield m.remap_modules(mapping)
+        lastmax = max(mapping.values())
+
+
 def main(show=False, save: Optional[Path] = None):
     phys, comb = get_memberships(0)
-    phys_agg, comb_agg = (m.agglomerate(10)[0] for m in (phys, comb))
+    phys_agg = phys.agglomerate(10, 'phys. other')[0]
+    comb_agg = comb.agglomerate(10, 'comb. other')[0]
 
     draw_sankey(phys_agg, comb_agg, show, save.with_suffix(".svg") if save else None)
     if save:
@@ -293,4 +301,14 @@ def main(show=False, save: Optional[Path] = None):
 
 
 if __name__ == '__main__':
+    # phys, comb = get_memberships(0)
+    # phys_agg, comb_agg = (m.agglomerate(10)[0] for m in (phys, comb))
+    #
+    # phys_ints, comb_ints = to_int_idx(phys_agg, comb_agg)
+    # d = dict()
+    # for (pre, post), weight in phys_ints.compare(comb_ints):
+    #     d[f"{pre} {post}"] = weight
+    # with open("example.json", 'w') as f:
+    #     json.dump(d, f, sort_keys=True, indent=2)
     main(True)
+    # main(save=OUT_DIR / "modules.svg")

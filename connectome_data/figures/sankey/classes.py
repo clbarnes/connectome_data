@@ -12,10 +12,9 @@ from numbers import Number
 from typing import Dict, Any, Tuple, Optional, List, NamedTuple, Iterator, Sequence, Iterable
 
 from colour import Color
+from palettable.palette import Palette
 from shapely.geometry import LineString
 
-import matplotlib
-# matplotlib.use('TkAgg')
 from matplotlib import pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
@@ -24,9 +23,10 @@ from matplotlib.patches import Rectangle
 from tqdm import trange, tqdm
 import palettable
 
-from connectome_data.figures.common import merge, module_name, blend_colors
+from connectome_data.figures.common import merge, blend_colors
 from connectome_data.figures.constants import OUT_DIR
-from connectome_data.figures.module_members import PHYS_DIR, COMB_DIR, Membership, get_memberships
+# from connectome_data.figures.module_members import PHYS_DIR, COMB_DIR, Membership, get_memberships
+from connectome_data.figures.sankey.sorting import SankeySorter, MultiSankeySorter
 
 
 def _fig_ax(ax: Optional[Axes]) -> Tuple[Figure, Axes]:
@@ -112,8 +112,13 @@ class Sankey:
         **kwargs
     ):
         """Labels in top-to-bottom order"""
+
         # arbitrary n stages not supported
-        self.labels = (left_labels, right_labels)
+        # self.labels = (left_labels, right_labels)
+        self.labels = MultiSankeySorter(
+            [left_labels, right_labels],
+            {frozenset(k): v for k, v in weights.items()}
+        ).sort()
         self.weights = weights
 
         self.vertical_spacing = from_dicts("vertical_spacing", kwargs, defaults)
@@ -135,11 +140,13 @@ class Sankey:
         # self.ax.set_axis_off()
 
         if left_colors is None:
-            left_colors = {label: self.default_color for label in left_labels}
+            left_colors = {label: self.default_color for label in self.labels[0]}
         elif isinstance(left_colors, dict):
             left_colors = {k: Color(v) for k, v in left_colors.items()}
-        else:
-            left_colors = {k: Color(left_colors) for k in left_labels}
+        elif isinstance(left_colors, Palette):
+            left_colors = {k: Color(rgb=rgb) for k, rgb in zip(self.labels[0], left_colors.mpl_colors)}
+        else:  # single color given, maybe
+            left_colors = {k: Color(left_colors) for k in self.labels[0]}
 
         blend_method = from_dicts("blend_method", kwargs, defaults)
         colors = [left_colors]
@@ -328,11 +335,12 @@ class Sankey:
     #     self.fig.show()
 
     @classmethod
-    def from_memberships(cls, m1: Membership, m2: Membership):
-        labels1 = [l for l, _ in m1.as_sets(True)]
-        labels2 = [l for l, _ in m2.as_sets(True)]
+    def from_memberships(cls, m1, m2):
+        # labels1 = [l for l, _ in m1.as_sets(True)]
+        # labels2 = [l for l, _ in m2.as_sets(True)]
         weights = dict(m1.compare(m2))
-        return cls(labels1, labels2, weights)
+        return cls(weights)
+        # return cls(labels1, labels2, weights)
 
     def optimal_sort(self):
         for x in enumerate(self.labels):
@@ -439,26 +447,16 @@ class IdxSorting:
         return d
 
 
-def update_name(lst):
-    other = max(lst)
-    return ["other" if n == other else module_name(n) for n in lst]
-
-
 if __name__ == '__main__':
-    phys, comb = get_memberships()
-
-    with open("ordering.json") as f:
-        sorting = json.load(f)
-
-    cseq = palettable.colorbrewer.qualitative.Set1_6.mpl_colors
-    colors = {label: Color(rgb=c) for label, c in zip(sorting["left"], cseq)}
-
-    sankey = Sankey(
-        sorting["left"], sorting["right"], dict(phys.compare(comb)),
-        xticklabels=("physical", "combined"), left_colors=colors
-    )
-    sankey.save(OUT_DIR / "modules.svg")
-    plt.show()
+    pass
+    # phys, comb = get_memberships()
+    #
+    # cseq = palettable.colorbrewer.qualitative.Set1_6.mpl_colors
+    # colors = {label: Color(rgb=c) for label, c in zip(sorting["left"], cseq)}
+    #
+    # sankey = Sankey(dict(phys.compare(comb)), xticklabels=("physical", "combined"), left_colors=colors)
+    # sankey.save(OUT_DIR / "modules.svg")
+    # plt.show()
 
     # sorting = IdxSorting.from_memberships(phys, comb)
 
