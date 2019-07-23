@@ -17,6 +17,8 @@ from connectome_data.constants import NODES_DATA
 from connectome_data.figures.constants import TGT_DIR, DEFAULT_WIRING, OUT_DIR
 from connectome_data.figures.sankey.classes import Sankey
 
+AGGLOM_THRESHOLD = 13
+
 PHYS_DIR = TGT_DIR / str(DEFAULT_WIRING)
 COMB_DIR = TGT_DIR / "combined" / f"{str(DEFAULT_WIRING)}+monoamine"
 
@@ -122,12 +124,12 @@ class Membership:
 
 
 default_stopwords = set(nltk.corpus.stopwords.words('english')) | set(string.punctuation) | {
-    "neuron", "synapt", "connect", "make", "innervat"
+    "neuron", "synapt", "synaps", "connect", "make", "innervat", "cell"
 }
 
 
-def dictzip(*dicts, check_keys=True, default=None):
-    """Given some dicts with the same keys, return """
+def dictzip(*dicts, check_keys=True, default=None) -> Dict[Any, Tuple[Any, ...]]:
+    """Given some dicts with the same keys, return a dict combining all their values"""
     if check_keys and len(set(frozenset(d) for d in dicts)) != 1:
         raise ValueError("Dicts must have the same keys")
     for key in dicts[0]:
@@ -239,9 +241,13 @@ class ModuleUnderstander(Membership):
             yield module_info.normalise_ntypes(all_ntypes)
 
 
+def num2name(n: int, prefix: str = "module ") -> str:
+    return f"{prefix}{n:02d}"
+
+
 def get_memberships(agglomerate=10):
-    phys = Membership.from_dir(PHYS_DIR, lambda x: f"phys. {x:02d}")
-    comb = Membership.from_dir(COMB_DIR, lambda x: f"comb. {x:02d}")
+    phys = Membership.from_dir(PHYS_DIR, lambda x: num2name(x, "phys. "))
+    comb = Membership.from_dir(COMB_DIR, lambda x: num2name(x, "comb. "))
     if agglomerate:
         phys = phys.agglomerate(agglomerate, 'phys. other')[0]
         comb = comb.agglomerate(agglomerate, 'comb. other')[0]
@@ -267,11 +273,14 @@ def draw_sankey(phys: Membership, comb: Membership, show=False, save=None):
     phys_order = [m for m, _ in phys.as_sets(True)]
     comb_order = list(set(comb.cell_to_idx.values()))
 
+    fig, ax = plt.subplots(figsize=(9, 6))
+
     sankey = Sankey(
         phys_order, comb_order,
-        dict(phys.compare(comb)),
+        dict(phys.compare(comb)), ax,
         xticklabels=("physical", "combined"), left_colors=palettable.colorbrewer.qualitative.Set1_6
     )
+    fig.tight_layout()
     if save:
         sankey.save(save)
     if show:
@@ -288,8 +297,27 @@ def to_int_idx(*memberships: Membership) -> Iterator[Membership]:
 
 def main(show=False, save: Optional[Path] = None):
     phys, comb = get_memberships(0)
-    phys_agg = phys.agglomerate(10, 'phys. other')[0]
-    comb_agg = comb.agglomerate(10, 'comb. other')[0]
+
+    phys = phys.remap_modules({
+        num2name(n, "phys. "): name for n, name in [
+            (2, "backward locomotion"),
+            (7, "forward locomotion"),
+            (11, "feeding"),
+            (12, "head control"),
+            (17, "amphid"),
+        ]
+    })
+    phys_agg = phys.agglomerate(AGGLOM_THRESHOLD, 'phys. other')[0]
+
+    comb = comb.remap_modules({
+        num2name(n, "comb. "): name for n, name in [
+            (1, "body motor"),
+            (6, "core"),
+            (10, "feeding + 5HT"),
+            (11, "head control + TYR"),
+        ]
+    })
+    comb_agg = comb.agglomerate(AGGLOM_THRESHOLD, 'comb. other')[0]
 
     draw_sankey(phys_agg, comb_agg, show, save.with_suffix(".svg") if save else None)
     if save:
@@ -310,5 +338,5 @@ if __name__ == '__main__':
     #     d[f"{pre} {post}"] = weight
     # with open("example.json", 'w') as f:
     #     json.dump(d, f, sort_keys=True, indent=2)
-    main(True)
-    # main(save=OUT_DIR / "modules.svg")
+    # main(True)
+    main(save=OUT_DIR / "modules.svg")
